@@ -1,0 +1,76 @@
+# This bootscript is a example of what a bootscript may look like.
+# Only use this as a reference and not for an actual product implementation.
+
+echo " - Setting kernel arguments"
+setenv bootargs ${bootargs} console=ttymxc0,115200 mtdoops.mtddev=oops ubi.mtd=user_definable ubi.mtd=firmware rootfstype=ramfs rw
+
+# The following if statements are used for qualification.
+
+# This test is part of test case 'U-Boot Firmware Image'
+## The factory data cannot be read in ${fit_addr}, therefore load into last 128KiB of FIT image location in DDR.
+## This is enough, since FIT image is not maximum size of storage partition.
+if test -n "${test_retrieve_factory_data}"; then
+  echo " --- Testing retrieving factory data in bootscript --- "
+  setenv test_retrieve_factory_data && sf probe &&
+  sf read 0x81880000 0x00120000 0x00020000 && env import 0x81880000 && saveenv
+fi
+
+# This test is part of test case 'U-Boot Firmware Image: env export'
+## The factory should not be modified, since it is programmed manually in the bootloader. Therefore, only export one
+## variable to the customer_data partition as text format to verify the functionality of env export.
+## The same method of test_retrieve_factory_data is used since only one variable will be exported
+## in the customer_data partition.
+if test -n "${test_env_export}"; then
+  echo " --- Testing exporting environment variable in bootscript --- "
+  setenv test_env_export && setenv customer prodrive && env export -s 0x20000 -t 0x81880000 customer &&
+  sf probe && sf write 0x81880000 0x00140000 0x00020000
+fi
+
+# This test is part of test case 'U-Boot Additional Features Environment'
+if test -n "${test_environment}"; then
+  echo " --- Testing U-Boot environment --- "
+  if itest.s "${ptic}" -eq ptic; then
+    echo true;
+  else
+    echo false;
+  fi;
+fi
+
+# This test is part of test case 'U-Boot Exit Bootscript'
+if test -n "${test_exit_bootscript}"; then
+  echo " --- Testing Exit U-Boot Command --- "
+  setenv test_exit_bootscript && exit 1; echo "Test Exit Bootscript Failed"
+fi
+
+# This test is part of test case 'U-Boot Additional Features USB Ethernet'
+if test -n "${test_usb_ethernet}"; then
+  echo " --- Testing USB Ethernet --- "
+  setenv autoload no && usb start && dhcp
+fi
+
+# This test is part of test case 'Data Security Fusing'
+if test -n "${test_hab_status}"; then
+  echo " --- Testing HAB Status --- "
+  hab_status
+fi
+
+# This test is part of test case 'U-Boot Watchdog Without Reset'
+if test -n "${test_wdt_noreset}"; then
+  echo " --- Testing WDT Without Reset --- "
+  setenv test_wdt_noreset && saveenv && sleep 130
+fi
+
+# This test is part of test case 'U-Boot Watchdog With Reset'
+if test -n "${test_wdt_reset}"; then
+  echo " --- Testing WDT With Reset --- "
+  setenv test_wdt_reset && saveenv && sleep 10 && wdt dev wdog@20bc0000 && wdt reset && sleep 130
+fi
+
+# This test is part of test case 'U-Boot SPI NOR Flash'
+if test -n "${test_boot_env}"; then
+  echo " --- Testing Writing U-Boot variable to SPI NOR --- "
+  setenv test_boot_env && setenv boot_env_variable passed && saveenv
+fi
+
+echo ===== U-Boot Script i.MX6ULL Building Block =====
+bootm ${fit_addr}

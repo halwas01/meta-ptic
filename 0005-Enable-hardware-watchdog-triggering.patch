@@ -1,0 +1,27 @@
+From 58cdbdcab287a9e7af3b4479c7f8199296782998 Mon Sep 17 00:00:00 2001
+From: Paul Geurts <paul.geurts@prodrive-technologies.com>
+Date: Mon, 27 Jun 2022 15:06:00 +0200
+Subject: [PATCH] Enable hardware watchdog triggering
+
+---
+ src/core/system.conf.in | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/system.conf.in b/src/core/system.conf.in
+index 67e55f10a2..ddf46e5cf1 100644
+--- a/src/core/system.conf.in
++++ b/src/core/system.conf.in
+@@ -29,10 +29,10 @@
+ #CPUAffinity=
+ #NUMAPolicy=default
+ #NUMAMask=
+-#RuntimeWatchdogSec=off
+-#RuntimeWatchdogPreSec=off
++RuntimeWatchdogSec=5
++RuntimeWatchdogPreSec=1
+ #RuntimeWatchdogPreGovernor=
+-#RebootWatchdogSec=10min
++RebootWatchdogSec=10min
+ #KExecWatchdogSec=off
+ #WatchdogDevice=
+ #CapabilityBoundingSet=
