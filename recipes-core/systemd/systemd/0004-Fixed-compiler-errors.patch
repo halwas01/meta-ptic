@@ -1,0 +1,89 @@
+From ddadab89427ab810396e7b7b4fb382b7aeec5818 Mon Sep 17 00:00:00 2001
+From: Paul Geurts <paul.geurts@prodrive-technologies.com>
+Date: Wed, 30 Aug 2023 11:32:14 +0200
+Subject: [PATCH] Fixed-compiler-errors
+
+---
+ src/shared/conf-parser.c | 27 +++++++++++++++++++++++++++
+ src/shared/conf-parser.h |  1 +
+ src/shared/watchdog.c    | 15 +++++++++++++++
+ 3 files changed, 43 insertions(+)
+
+diff --git a/src/shared/conf-parser.c b/src/shared/conf-parser.c
+index 1e1967d7ea..3d017801b1 100644
+--- a/src/shared/conf-parser.c
++++ b/src/shared/conf-parser.c
+@@ -829,6 +829,33 @@ int config_parse_string(
+         return free_and_strdup_warn(s, empty_to_null(rvalue));
+ }
+ 
++int config_parse_safe_string(
++                const char *unit,
++                const char *filename,
++                unsigned line,
++                const char *section,
++                unsigned section_line,
++                const char *lvalue,
++                int ltype,
++                const char *rvalue,
++                void *data,
++                void *userdata) {
++
++        char **s = data;
++
++        assert(filename);
++        assert(lvalue);
++        assert(rvalue);
++        assert(data);
++
++        if (!string_is_safe(rvalue)) {
++                log_syntax(unit, LOG_WARNING, filename, line, 0, "Specified string contains unsafe characters, ignoring: %s", rvalue);
++                return 0;
++        }
++
++        return free_and_strdup_warn(s, empty_to_null(rvalue));
++}
++
+ int config_parse_path(
+                 const char *unit,
+                 const char *filename,
+diff --git a/src/shared/conf-parser.h b/src/shared/conf-parser.h
+index d686665532..574664e8b9 100644
+--- a/src/shared/conf-parser.h
++++ b/src/shared/conf-parser.h
+@@ -131,6 +131,7 @@ CONFIG_PARSER_PROTOTYPE(config_parse_bool);
+ CONFIG_PARSER_PROTOTYPE(config_parse_id128);
+ CONFIG_PARSER_PROTOTYPE(config_parse_tristate);
+ CONFIG_PARSER_PROTOTYPE(config_parse_string);
++CONFIG_PARSER_PROTOTYPE(config_parse_safe_string);
+ CONFIG_PARSER_PROTOTYPE(config_parse_path);
+ CONFIG_PARSER_PROTOTYPE(config_parse_strv);
+ CONFIG_PARSER_PROTOTYPE(config_parse_sec);
+diff --git a/src/shared/watchdog.c b/src/shared/watchdog.c
+index c626af805e..104e0bb9be 100644
+--- a/src/shared/watchdog.c
++++ b/src/shared/watchdog.c
+@@ -24,8 +24,23 @@ static usec_t watchdog_last_ping = USEC_INFINITY;
+ static bool watchdog_supports_pretimeout = false; /* Depends on kernel state that might change at runtime */
+ static char *watchdog_pretimeout_governor = NULL;
+ 
++
++/* Starting from kernel version 4.5, the maximum allowable watchdog timeout is
++ * UINT_MAX/1000U seconds (since internal calculations are done in milliseconds
++ * using unsigned integers. However, the kernel's userspace API for the watchdog
++ * uses signed integers for its ioctl parameters (even for timeout values and
++ * bit flags) so this is why we must consider the maximum signed integer value
++ * as well.
++ */
++#define WATCHDOG_TIMEOUT_MAX_SEC (CONST_MIN(UINT_MAX/1000U, (unsigned)INT_MAX))
++
+ #define WATCHDOG_GOV_NAME_MAXLEN 20 /* From the kernel watchdog driver */
+ 
++static int saturated_usec_to_sec(usec_t val) {
++        usec_t t = DIV_ROUND_UP(val, USEC_PER_SEC);
++        return MIN(t, (usec_t) WATCHDOG_TIMEOUT_MAX_SEC); /* Saturate to watchdog max */
++}
++
+ static int get_watchdog_sysfs_path(const char *filename, char **ret_path) {
+         struct stat st;
+ 
